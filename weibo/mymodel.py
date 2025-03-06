@@ -315,6 +315,7 @@ class Multi_Model(nn.Module):
         corre_final = correlation * attention_score[:,2].unsqueeze(1)
         final_corre = torch.cat([text_final, img_final, corre_final], 1) 
         pre_label = self.classifier_corre(final_corre)
+        #pre_label就是对应L_CLS的预测值
 
         skl = self.ambiguity_module(text_aligned, image_aligned)
         weight_uni = (1-skl).unsqueeze(1)

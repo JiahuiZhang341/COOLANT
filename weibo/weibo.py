@@ -35,20 +35,24 @@ class Config():
     def __init__(self):
         self.batch_size = 64
         self.epochs = 50
-        self.bert_path = "./bert_ch_model"
-        self.device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
+        #self.bert_path = "./bert_ch_model"
+        self.bert_path = "bert-base-chinese" 
+        self.device = torch.device('cuda:2' if torch.cuda.is_available() else 'mps')
         self.lr = 1e-3
         self.l2 = 1e-5
 
 class FakeNewsDataset(Dataset):
-    def __init__(self,input_three,event,image,label) :
-        self.event = LongTensor(list(event)) 
-        self.image = torch.FloatTensor([np.array(i) for i in image]) 
-        self.label = LongTensor(list(label))
+    def __init__(self,file_path) :
+        # 从文件中加载特征数据
+        with open(file_path, 'rb') as f:
+            features_data = pickle.load(f)
+        self.event = LongTensor(list(features_data['event_labels'])) 
+        self.image = torch.FloatTensor([np.array(i) for i in features_data['images']]) 
+        self.label = LongTensor(list(features_data['train_labels']))
         self.input_three = list()
-        self.input_three.append( LongTensor(input_three[0]))
-        self.input_three.append(LongTensor(input_three[1]))
-        self.input_three.append(LongTensor(input_three[2]))
+        self.input_three.append( LongTensor(features_data['input_three'][0]))
+        self.input_three.append(LongTensor(features_data['input_three'][1]))
+        self.input_three.append(LongTensor(features_data['input_three'][2]))
     def __len__(self):
         return len(self.label)
     
@@ -106,25 +110,31 @@ def soft_loss(input, target):
     
 train_acc_vector = []
 vali_acc_vector = []
+
+
 def train_val_test():
     #train , test , validate 
     config = Config()
-    train_dataset = pickle.load(open('./pickles/new_train_dataset.pkl','rb'))
-    test_dataset = pickle.load(open('./pickles/new_test_dataset.pkl','rb'))
+    #train_dataset = pickle.load(open('./pickles/new_train_dataset.pkl','rb'))
+    #test_dataset = pickle.load(open('./pickles/new_test_dataset.pkl','rb'))
+
+    train_dataset = FakeNewsDataset(file_path='./pickles/new_train_dataset.pkl')
+    test_dataset = FakeNewsDataset(file_path='./pickles/new_test_dataset.pkl')
     print(len(train_dataset),len(test_dataset))
     print("dataset dump ok")
 
     train_loader = DataLoader(train_dataset,batch_size=config.batch_size,shuffle=True)
     test_loader = DataLoader(test_dataset,batch_size=config.batch_size,shuffle=False)
     print('process data  Loader success')
-
     # ---  Build Model & Trainer  ---
     similarity_module = SimilarityModule(config.bert_path)  
     similarity_module.to(config.device)
     clip_module = CLIP(64, config.bert_path)
     clip_module.to(config.device)
     loss_func_similarity = torch.nn.CosineEmbeddingLoss(margin=0.2)
+    #相当于L_ITM
     loss_func_clip = torch.nn.CrossEntropyLoss()
+    #可能是后面的一个损失函数的一部分    
     optim_task_similarity = torch.optim.Adam(
         similarity_module.parameters(), lr=config.lr, weight_decay=config.l2
     )  # also called task1
@@ -199,6 +209,7 @@ def train_val_test():
 
             optim_task_similarity.zero_grad()
             loss_similarity = loss_func_similarity(text_aligned_4_task1, image_aligned_4_task1, similarity_label_1)
+            #计算L_ITM
             loss_similarity.backward()
             optim_task_similarity.step()
 
@@ -212,6 +223,7 @@ def train_val_test():
             soft_label = torch.matmul(image_sim, text_sim.T) * math.exp(0.07)
             soft_label = soft_label.to(config.device)
             
+            #计算L_ITC , L_CL
             optimizer_task_clip.zero_grad()
             loss_clip_i = loss_func_clip(logits, labels)
             loss_clip_t = loss_func_clip(logits.T, labels)
@@ -223,10 +235,14 @@ def train_val_test():
             all_loss.backward()
             step += 1
             optimizer_task_clip.step()
+
+
+
             # ---  TASK2 Detection  ---
             image_aligned, text_aligned = clip_module(batch_text0,batch_text1,batch_text2,batch_image) # N* 64
             label_pred, attention_score, skl_score = bert_multi_model(batch_text0,batch_text1,batch_text2,batch_image, text_aligned, image_aligned)
             loss = loss_func_detection(label_pred,batch_label) + 0.5 * loss_func_skl(attention_score, skl_score)
+            #Loss = L_CLS + lamda * L_AG
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
