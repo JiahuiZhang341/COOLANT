@@ -37,7 +37,7 @@ class Config():
         self.epochs = 50
         #self.bert_path = "./bert_ch_model"
         self.bert_path = "bert-base-chinese" 
-        self.device = torch.device('cuda:2' if torch.cuda.is_available() else 'mps')
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'mps')
         self.lr = 1e-3
         self.l2 = 1e-5
 
