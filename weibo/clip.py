@@ -97,7 +97,7 @@ class CLIP(nn.Module):
         self.ninp = ninp
         self.text_fc = nn.Linear(ninp, out_channels)
 
-    def forward(self, input_ids, attention_mask, token_type_ids, img):
+    def forward(self, text_features_0, text_features_1, img):
         n_batch = img.size(0)
         img_out = self.img_model(img)
         img_out = self.avg_pool(img_out)
@@ -105,8 +105,8 @@ class CLIP(nn.Module):
         img_out = self.img_fc(img_out)
         img_out = F.normalize(img_out, p=2, dim=-1)
 
-        outputs = self.bert(input_ids, attention_mask, token_type_ids)
-        text_encoding = outputs[0] 
+        #outputs = self.bert(input_ids, attention_mask, token_type_ids)
+        text_encoding = text_features_0
         #text_encoding = self.text_fc1(text_encoding)
         text_encoding = self.shared_text_encoding(text_encoding) 
         text_shared = self.shared_text_linear(text_encoding) 

@@ -49,15 +49,13 @@ class FakeNewsDataset(Dataset):
         self.event = LongTensor(list(features_data['event_labels'])) 
         self.image = torch.FloatTensor([np.array(i) for i in features_data['images']]) 
         self.label = LongTensor(list(features_data['train_labels']))
-        self.input_three = list()
-        self.input_three.append( LongTensor(features_data['input_three'][0]))
-        self.input_three.append(LongTensor(features_data['input_three'][1]))
-        self.input_three.append(LongTensor(features_data['input_three'][2]))
+        self.text_features_0 = features_data['text_features_0']
+        self.text_features_1 = features_data['text_features_1']
     def __len__(self):
         return len(self.label)
     
     def __getitem__(self,idx):
-        return self.input_three[0][idx],self.input_three[1][idx],self.input_three[2][idx],self.image[idx],self.event[idx],self.label[idx]
+        return self.text_features_0[idx],self.text_features_1[idx],self.image[idx],self.event[idx],self.label[idx]
 
 def cleanSST(string):
     string = re.sub(u"[，。 :,.；|-“”——_/nbsp+&;@、《》～（）())#O！：【】]", "", string)
@@ -88,21 +86,19 @@ def evaluate(clip_module, multi_model,vali_dataloader,device):
     print(classification_report(val_true, val_pred, target_names=['Real News','Fake News'], digits = 3))
     return accuracy_score(val_true, val_pred)
 
-def prepare_data(text0,text1,text2, image, label):
+def prepare_data(text_features_0,text_features_1, image, label):
     nr_index = [i for i, l in enumerate(label) if l == 0]
     if len(nr_index) < 2:
         nr_index.append(np.random.randint(len(label)))
         nr_index.append(np.random.randint(len(label)))
-    text0_nr = text0[nr_index]
-    text1_nr = text1[nr_index]
-    text2_nr = text2[nr_index]
+    text_features_0_nr = text_features_0[nr_index]
+    text_features_1_nr = text_features_1[nr_index]
     image_nr = image[nr_index]
-    fixed_text0 = copy.deepcopy(text0_nr)
-    fixed_text1 = copy.deepcopy(text1_nr)
-    fixed_text2 = copy.deepcopy(text2_nr)
+    fixed_text_features_0 = copy.deepcopy(text_features_0_nr)
+    fixed_text_features_1 = copy.deepcopy(text_features_1_nr)
     matched_image = copy.deepcopy(image_nr)
     unmatched_image = copy.deepcopy(image_nr).roll(shifts=3, dims=0)
-    return fixed_text0, fixed_text1,fixed_text2,matched_image, unmatched_image
+    return fixed_text_features_0 ,fixed_text_features_1 ,matched_image, unmatched_image
 
 def soft_loss(input, target):
     logprobs = torch.nn.functional.log_softmax(input, dim = 1)
@@ -170,18 +166,16 @@ def train_val_test():
         similarity_count = 0
         loss_clip_total = 0
 
-        for index,(batch_text0,batch_text1,batch_text2,batch_image,batch_event,batch_label) in enumerate(train_loader):
-            batch_text0 = Variable(batch_text0.to(config.device))
-            batch_text1 = Variable(batch_text1.to(config.device))
-            batch_text2 = Variable(batch_text2.to(config.device))
+        for index,(batch_text_features_0,batch_text_features_1,batch_image,batch_event,batch_label) in enumerate(train_loader):
+            batch_text_features_0 = Variable(batch_text_features_0.to(config.device))
+            batch_text_features_1 = Variable(batch_text_features_1.to(config.device))
             batch_image = Variable(batch_image.to(config.device))
             batch_event = Variable(batch_event.to(config.device))
             batch_label = Variable(batch_label.to(config.device))
 
-            fixed_text0,fixed_text1,fixed_text2, matched_image, unmatched_image = prepare_data(batch_text0,batch_text1,batch_text2,batch_image,batch_label)
-            fixed_text0 = Variable(fixed_text0.to(config.device))
-            fixed_text1 = Variable(fixed_text1.to(config.device))
-            fixed_text2 = Variable(fixed_text2.to(config.device))
+            fixed_text_features_0,fixed_text_features_1, matched_image, unmatched_image = prepare_data(batch_text_features_0, batch_text_features_1,batch_image,batch_label)
+            fixed_text_features_0 = Variable(fixed_text_features_0.to(config.device))
+            fixed_text_features_1 = Variable(fixed_text_features_1.to(config.device))
             matched_image = Variable(matched_image.to(config.device))
             unmatched_image = Variable(unmatched_image.to(config.device))
 
@@ -189,8 +183,8 @@ def train_val_test():
 
             # ---  TASK1 Similarity  ---
 
-            text_aligned_match, image_aligned_match, pred_similarity_match = similarity_module(fixed_text0,fixed_text1,fixed_text2,matched_image)
-            text_aligned_unmatch, image_aligned_unmatch, pred_similarity_unmatch = similarity_module(fixed_text0,fixed_text1,fixed_text2, unmatched_image)
+            text_aligned_match, image_aligned_match, pred_similarity_match = similarity_module(fixed_text_features_0, fixed_text_features_1,matched_image)
+            text_aligned_unmatch, image_aligned_unmatch, pred_similarity_unmatch = similarity_module(fixed_text_features_0, fixed_text_features_1, unmatched_image)
             # 1:positive/match 0:negative/unmatch
             similarity_pred = torch.cat([pred_similarity_match.argmax(1), pred_similarity_unmatch.argmax(1)], dim=0)
             similarity_label_0 = torch.cat([torch.ones(pred_similarity_match.shape[0]), torch.zeros(pred_similarity_unmatch.shape[0])], dim=0).to(config.device)
@@ -201,7 +195,7 @@ def train_val_test():
             
 
             # ---  TASK1 CLIP  ---
-            text_sim, image_sim, _ = similarity_module(batch_text0,batch_text1,batch_text2,batch_image) 
+            text_sim, image_sim, _ = similarity_module(batch_text_features_0, batch_text_features_1, batch_image) 
             soft_label = torch.matmul(image_sim, text_sim.T) * math.exp(0.07)
             soft_label = soft_label.to(config.device)
             labels = torch.arange(batch_image.size(0))
@@ -215,11 +209,11 @@ def train_val_test():
 
             # corrects_pre_similarity += similarity_pred.eq(similarity_label_0).sum().item()
 
-            image_aligned, text_aligned = clip_module(batch_text0,batch_text1,batch_text2,batch_image)
+            image_aligned, text_aligned = clip_module(batch_text_features_0, batch_text_features_1,batch_image)
             logits = torch.matmul(image_aligned, text_aligned.T) * math.exp(0.07)
             labels = torch.arange(batch_image.size(0))
             labels = labels.to(config.device)
-            text_sim, image_sim, _ = similarity_module(batch_text0,batch_text1,batch_text2,batch_image) 
+            text_sim, image_sim, _ = similarity_module(batch_text_features_0, batch_text_features_1,batch_image) 
             soft_label = torch.matmul(image_sim, text_sim.T) * math.exp(0.07)
             soft_label = soft_label.to(config.device)
             
@@ -239,8 +233,8 @@ def train_val_test():
 
 
             # ---  TASK2 Detection  ---
-            image_aligned, text_aligned = clip_module(batch_text0,batch_text1,batch_text2,batch_image) # N* 64
-            label_pred, attention_score, skl_score = bert_multi_model(batch_text0,batch_text1,batch_text2,batch_image, text_aligned, image_aligned)
+            image_aligned, text_aligned = clip_module(batch_text_features_0, batch_text_features_1,batch_image) # N* 64
+            label_pred, attention_score, skl_score = bert_multi_model(batch_text_features_0, batch_text_features_1,batch_image, text_aligned, image_aligned)
             loss = loss_func_detection(label_pred,batch_label) + 0.5 * loss_func_skl(attention_score, skl_score)
             #Loss = L_CLS + lamda * L_AG
             optimizer.zero_grad()

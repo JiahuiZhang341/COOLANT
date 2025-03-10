@@ -66,10 +66,10 @@ def save_features_batch_by_batch(args, text):
     tokenizer = BertTokenizer.from_pretrained('bert-base-chinese')
     inputs = tokenizer(text,padding='max_length', truncation=True, max_length = 512, return_tensors='pt')
     inputs = inputs.to(device)
-    input_ids = inputs['input_ids'].cpu().detach().numpy()
-    attention_mask = inputs["attention_mask"].cpu().detach().numpy()
-    token_type_ids = inputs["token_type_ids"].cpu().detach().numpy()
-
+    input_ids = inputs['input_ids']
+    attention_mask = inputs["attention_mask"]
+    token_type_ids = inputs["token_type_ids"]
+    outputs = model(input_ids, attention_mask, token_type_ids)
     #print(model.config.hidden_size)
     #model.bert_fc = nn.Linear(model.config.hidden_size, args.hidden_dim)
     
@@ -88,7 +88,7 @@ def save_features_batch_by_batch(args, text):
     #all_image_features.append(image_features.cpu().detach().numpy())
 
     #return all_text_features, all_image_features
-    return input_ids, attention_mask, token_type_ids
+    return outputs
 
 def parse_arguments(parser):
     parser.add_argument('training_file', type=str, metavar='<training_file>', help='')
@@ -196,38 +196,40 @@ def main(args):
                              shuffle=False)
     all_train_labels = []
     all_event_labels = []
-    all_input_ids = []
-    all_attention_mask = []
-    all_token_type_ids = []
     all_images = []
-    #all_image_features = []
+    all_text_features_0 = []
+    all_text_features_1 = []
     print('building model')
 
-    for i, (train_text, train_image, train_labels, event_labels) in enumerate(test_loader):
+    for i, (train_text, train_image, train_labels, event_labels) in enumerate(train_loader):
             train_text, train_image, train_labels, event_labels = \
                 train_text, to_var(train_image), \
                 to_var(train_labels), to_var(event_labels)
-            input_ids, attention_mask, token_type_ids = save_features_batch_by_batch(args, train_text)
-            all_input_ids.append(input_ids)
-            all_attention_mask.append(attention_mask)
-            all_token_type_ids.append(token_type_ids)
+            text_features = save_features_batch_by_batch(args, train_text)
+            all_text_features_0.append(text_features[0].cpu().detach().numpy())
+            all_text_features_1.append(text_features[1].cpu().detach().numpy())
             all_images.append(train_image.cpu().detach().numpy())
             all_train_labels.append(train_labels.cpu().detach().numpy())
             all_event_labels.append(event_labels.cpu().detach().numpy())
 
     # 把 list 转换为 numpy 数组
+    '''
     all_input_ids = np.concatenate(all_input_ids, axis=0)
     all_attention_mask = np.concatenate(all_attention_mask, axis=0)
     all_token_type_ids = np.concatenate(all_token_type_ids, axis=0)
     input_three = [all_input_ids, all_attention_mask, all_token_type_ids]
+    '''
+    all_text_features_0 = np.concatenate(all_text_features_0, axis=0)
+    all_text_features_1 = np.concatenate(all_text_features_1, axis=0)
     all_images = np.concatenate(all_images, axis=0)
     all_train_labels = np.concatenate(all_train_labels, axis=0)
     all_event_labels = np.concatenate(all_event_labels, axis=0)
     #all_image_features = np.concatenate(all_image_features, axis=0)
     # 一次性保存
-    save_path = './pickles/new_test_dataset.pkl'
+    save_path = './pickles/new_train_dataset.pkl'
     features_data = {
-        'input_three': input_three,
+        'text_features_0': all_text_features_0,
+        'text_features_1': all_text_features_1,
         'event_labels': all_event_labels,
         'images': all_images,
         'train_labels': all_train_labels

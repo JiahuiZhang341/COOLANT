@@ -233,9 +233,9 @@ class SimilarityModule(nn.Module):
             nn.Linear(64, 2)
         )
 
-    def forward(self, input_ids, attention_mask, token_type_ids, img):
-        outputs = self.bert(input_ids, attention_mask, token_type_ids)     
-        text = outputs[0]  
+    def forward(self,text_features_0,text_features_1 , img):
+        #outputs = self.bert(input_ids, attention_mask, token_type_ids)     
+        text = text_features_0
         n_batch = img.size(0)
         img_out = self.img_model(img)
         img_out = self.avg_pool(img_out)
@@ -291,10 +291,10 @@ class Multi_Model(nn.Module):
             nn.Linear(h_dim, 2)
         )
         
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None,img=None, text_aligned=None, image_aligned=None):
-        outputs = self.bert(input_ids, attention_mask, token_type_ids)
+    def forward(self, text_features_0, text_features_1,img=None, text_aligned=None, image_aligned=None):
+        #outputs = self.bert(input_ids, attention_mask, token_type_ids)
        
-        text = outputs[1]  
+        text = text_features_1
        
         text = self.text_fc1(text)
         
