@@ -12,7 +12,7 @@ We conduct experiments on two benchmark datasets Twitter and Weibo. In experimen
 
 ## Training
 To train the COOLANT:
-需要训练集/测试集,就把循环那里的train_loader/test_loader 改一下就好, 然后再改一下存储的文件名称就好(new_train_dataset.pkl/new_test_dataset.pkl)
+需要训练集/测试集,可以在循环那里的train_loader/test_loader 更改一下, 并且需要更改存储的文件名称(new_train_dataset.pkl/new_test_dataset.pkl)
 ```shell script
 python save_features.py
 python weibo/weibo.py 
