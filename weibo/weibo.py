@@ -26,6 +26,8 @@ from clip import CLIP
 import math
 warnings.filterwarnings('ignore')
 
+import os
+os.environ['PYTORCH_MPS_HIGH_WATERMARK_RATIO'] = '0.0'
 seed = 3407
 np.random.seed(seed)
 torch.manual_seed(seed) 
@@ -37,7 +39,7 @@ class Config():
         self.epochs = 50
         #self.bert_path = "./bert_ch_model"
         self.bert_path = "bert-base-chinese" 
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'mps')
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'mps')
         self.lr = 1e-3
         self.l2 = 1e-5
 
@@ -71,15 +73,14 @@ def evaluate(clip_module, multi_model,vali_dataloader,device):
     multi_model.eval()
     val_true, val_pred = [], []
     with torch.no_grad():
-        for index,(batch_text0,batch_text1,batch_text2,batch_image,batch_event,batch_label) in enumerate(vali_dataloader):
-            batch_text0 = batch_text0.to(device)
-            batch_text1 = batch_text1.to(device)
-            batch_text2 = batch_text2.to(device)
+        for index,(batch_text_features_0,batch_text_features_1,batch_image,batch_event,batch_label) in enumerate(vali_dataloader):
+            batch_text_features_0 = batch_text_features_0.to(device)
+            batch_text_features_1 = batch_text_features_1.to(device)
             batch_image = batch_image.to(device)
             batch_event = batch_event.to(device)
             batch_label = batch_label.to(device)
-            image_aligned, text_aligned = clip_module(batch_text0,batch_text1,batch_text2,batch_image) # N* 64
-            y_pred, a_s, s_s = multi_model(batch_text0,batch_text1,batch_text2,batch_image, text_aligned, image_aligned)
+            image_aligned, text_aligned = clip_module(batch_text_features_0,batch_text_features_1,batch_image) # N* 64
+            y_pred, a_s, s_s,_ = multi_model(batch_text_features_0,batch_text_features_1,batch_image, text_aligned, image_aligned)
             y_pred = torch.argmax(y_pred, dim=1).detach().cpu().numpy().tolist()
             val_pred.extend(y_pred)
             val_true.extend(batch_label.squeeze().cpu().numpy().tolist())
@@ -111,6 +112,7 @@ vali_acc_vector = []
 def train_val_test():
     #train , test , validate 
     config = Config()
+    print(config.device)
     #train_dataset = pickle.load(open('./pickles/new_train_dataset.pkl','rb'))
     #test_dataset = pickle.load(open('./pickles/new_test_dataset.pkl','rb'))
 
@@ -234,11 +236,12 @@ def train_val_test():
 
             # ---  TASK2 Detection  ---
             image_aligned, text_aligned = clip_module(batch_text_features_0, batch_text_features_1,batch_image) # N* 64
-            label_pred, attention_score, skl_score = bert_multi_model(batch_text_features_0, batch_text_features_1,batch_image, text_aligned, image_aligned)
+            label_pred, attention_score, skl_score, _ = bert_multi_model(batch_text_features_0, batch_text_features_1,batch_image, text_aligned, image_aligned)
             loss = loss_func_detection(label_pred,batch_label) + 0.5 * loss_func_skl(attention_score, skl_score)
             #Loss = L_CLS + lamda * L_AG
             optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(bert_multi_model.parameters(), max_norm=1.0)
             optimizer.step()
             scheduler.step()   
           
