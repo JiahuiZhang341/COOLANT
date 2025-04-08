@@ -9,9 +9,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
-from transformers import BertModel, BertConfig, BertTokenizer, AdamW, get_cosine_schedule_with_warmup
+from transformers import BertModel, BertConfig, BertTokenizer, get_cosine_schedule_with_warmup
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 import warnings
+from torch.optim import AdamW
 import re
 import torchvision
 import torch.nn as nn
@@ -29,7 +30,8 @@ from torch.distributions import Normal, Independent
 from torch.nn.functional import softplus
 from torchvision.models import resnet18
 from SENet import Network
-
+import os 
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 class Encoder(nn.Module):
     def __init__(self, z_dim=2):
         super(Encoder, self).__init__()
@@ -233,9 +235,9 @@ class SimilarityModule(nn.Module):
             nn.Linear(64, 2)
         )
 
-    def forward(self,text_features_0,text_features_1 , img):
-        #outputs = self.bert(input_ids, attention_mask, token_type_ids)     
-        text = text_features_0
+    def forward(self, input_ids, attention_mask, token_type_ids, img):
+        outputs = self.bert(input_ids, attention_mask, token_type_ids)     
+        text = outputs[0]  
         n_batch = img.size(0)
         img_out = self.img_model(img)
         img_out = self.avg_pool(img_out)
@@ -291,10 +293,10 @@ class Multi_Model(nn.Module):
             nn.Linear(h_dim, 2)
         )
         
-    def forward(self, text_features_0, text_features_1,img=None, text_aligned=None, image_aligned=None):
-        #outputs = self.bert(input_ids, attention_mask, token_type_ids)
+    def forward(self, input_ids, attention_mask=None, token_type_ids=None,img=None, text_aligned=None, image_aligned=None):
+        outputs = self.bert(input_ids, attention_mask, token_type_ids)
        
-        text = text_features_1
+        text = outputs[1]  
        
         text = self.text_fc1(text)
         
@@ -315,7 +317,6 @@ class Multi_Model(nn.Module):
         corre_final = correlation * attention_score[:,2].unsqueeze(1)
         final_corre = torch.cat([text_final, img_final, corre_final], 1) 
         pre_label = self.classifier_corre(final_corre)
-        #pre_label就是对应L_CLS的预测值
 
         skl = self.ambiguity_module(text_aligned, image_aligned)
         weight_uni = (1-skl).unsqueeze(1)

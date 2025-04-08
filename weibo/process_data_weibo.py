@@ -84,8 +84,10 @@ def write_data(flag, image, text_only):
                          pre_path + "train_nonrumor.txt", pre_path + "train_rumor.txt"]
         if flag == "train":
             id = pickle.load(open("../Data/weibo/train_id.pickle", 'rb'))
-        elif flag == "validate":
-            id = pickle.load(open("../Data/weibo/validate_id.pickle", 'rb'))
+            id_v = pickle.load(open("../Data/weibo/validate_id.pickle", 'rb'))
+            id.update(id_v)
+        #elif flag == "validate":
+        #    id = pickle.load(open("../Data/weibo/validate_id.pickle", 'rb'))
         elif flag == "test":
             id = pickle.load(open("../Data/weibo/test_id.pickle", 'rb'))
 
@@ -256,9 +258,9 @@ def write_data(flag, image, text_only):
     return paired_data
 
 
-def load_data(train, validate, test):
+def load_data(train, test):
     vocab = defaultdict(float)
-    all_text = list(train['post_text']) + list(validate['post_text'])+list(test['post_text'])
+    all_text = list(train['post_text']) +list(test['post_text'])
     for sentence in all_text:
         for word in sentence:
             vocab[word] += 1
@@ -374,12 +376,12 @@ def get_data(text_only):
         image_list = read_image()
 
     train_data = write_data("train", image_list, text_only)
-    valiate_data = write_data("validate", image_list, text_only)
+    #valiate_data = write_data("validate", image_list, text_only)
     test_data = write_data("test", image_list, text_only)
 
     print("loading data...")
     # w2v_file = '../Data/GoogleNews-vectors-negative300.bin'
-    vocab, all_text = load_data(train_data, valiate_data, test_data)
+    vocab, all_text = load_data(train_data, test_data)
     # print(str(len(all_text)))
 
     print("number of sentences: " + str(len(all_text)))
@@ -435,7 +437,7 @@ def get_data(text_only):
     w_file = open("../Data/weibo/word_embedding.pickle", "wb")
     pickle.dump([W, W2, word_idx_map, vocab, max_l], w_file)
     w_file.close()
-    return train_data, valiate_data, test_data
+    return train_data, test_data
 
 
 

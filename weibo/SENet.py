@@ -71,16 +71,16 @@ class Network(nn.Module):
 
     def forward(self, x):
         x = self.conv_block(x)
-        print("after conv:{}".format(x.shape))
+        #print("after conv:{}".format(x.shape))
         x = self.res_blocks(x)
-        print("after res:{}".format(x.shape))
+        #print("after res:{}".format(x.shape))
         x = self.out_conv(x)
-        print("after out_conv:{}".format(x.shape))
+        #print("after out_conv:{}".format(x.shape))
         x = F.adaptive_avg_pool1d(x, 1)
-        print("after avg pool:{}".format(x.shape))
+        #print("after avg pool:{}".format(x.shape))
 
         x = x.view(x.data.size(0), -1)
-        print("after view:{}".format(x.shape))
+        #print("after view:{}".format(x.shape))
         x = self.fc(x)
 
         return F.log_softmax(x, dim=1)

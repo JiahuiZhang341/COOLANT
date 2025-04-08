@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 from torchvision.models import resnet18
-from transformers import BertModel, BertConfig, BertTokenizer, AdamW, get_cosine_schedule_with_warmup
+from transformers import BertModel, BertConfig, BertTokenizer,get_cosine_schedule_with_warmup
 from transformers import AutoTokenizer, AutoModelForMaskedLM
-
+from torch.optim import AdamW
 import math
 
 class FastCNN(nn.Module):
@@ -97,7 +97,7 @@ class CLIP(nn.Module):
         self.ninp = ninp
         self.text_fc = nn.Linear(ninp, out_channels)
 
-    def forward(self, text_features_0, text_features_1, img):
+    def forward(self, input_ids, attention_mask, token_type_ids, img):
         n_batch = img.size(0)
         img_out = self.img_model(img)
         img_out = self.avg_pool(img_out)
@@ -105,8 +105,8 @@ class CLIP(nn.Module):
         img_out = self.img_fc(img_out)
         img_out = F.normalize(img_out, p=2, dim=-1)
 
-        #outputs = self.bert(input_ids, attention_mask, token_type_ids)
-        text_encoding = text_features_0
+        outputs = self.bert(input_ids, attention_mask, token_type_ids)
+        text_encoding = outputs[0] 
         #text_encoding = self.text_fc1(text_encoding)
         text_encoding = self.shared_text_encoding(text_encoding) 
         text_shared = self.shared_text_linear(text_encoding) 
