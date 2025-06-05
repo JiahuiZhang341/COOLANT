@@ -167,11 +167,12 @@ def write_data(flag, image, text_only):
         write_txt(top_data)
 
         return post_content, data_df
-    
+
     post_content, post = read_post(flag)
     print("Original post length is " + str(len(post_content)))
     print("Original data frame is " + str(post.shape))
-    
+
+
     def find_most(db):
         maxcount = max(len(v) for v in db.values())
         return [k for k, v in db.items() if len(v) == maxcount]

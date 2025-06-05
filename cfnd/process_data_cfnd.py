@@ -21,7 +21,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import os.path
 from gensim.models import Word2Vec
 
-def stopwordslist(filepath = '../Data/weibo/stop_words.txt'):
+def stopwordslist(filepath = '../CFND/stop_words.txt'):
     stopwords = {}
     for line in open(filepath, 'r').readlines():
         line = line.strip()
@@ -41,9 +41,10 @@ def clean_str_sst(string):
 # reload(sys)
 # sys.setdefaultencoding("utf-8")
 #
+'''
 def read_image():
     image_list = {}
-    file_list = ['../Data/weibo/nonrumor_images/', '../Data/weibo/rumor_images/']
+    file_list = ['../CFND/images']
     for path in file_list:
         data_transforms = transforms.Compose([
             transforms.Resize(256),
@@ -65,9 +66,34 @@ def read_image():
     print("image length " + str(len(image_list)))
     #print("image names are " + str(image_list.keys()))
     return image_list
+'''
+def read_image():
+    image_list = {}
+    root_path = '../CFND/images'
+    data_transforms = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+
+    for subdir, _, files in os.walk(root_path):
+        for filename in files:
+            if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+                full_path = os.path.join(subdir, filename)
+                try:
+                    im = Image.open(full_path).convert('RGB')
+                    im = data_transforms(im)
+                    image_id = os.path.splitext(filename)[0].lower()
+                    image_list[image_id] = im
+                except Exception as e:
+                    print(f"Error loading image {full_path}: {e}")
+
+    print("image length:", len(image_list))
+    return image_list
 
 def write_txt(data):
-    f = open("../Data/weibo/top_n_data.txt", 'wb')
+    f = open("../CFND/top_n_data.txt", 'wb')
     for line in data:
         for l in line:
             f.write(l+"\n")
@@ -76,98 +102,39 @@ def write_txt(data):
     f.close()
 text_dict = {}
 def write_data(flag, image, text_only):
-
     def read_post(flag):
         stop_words = stopwordslist()
-        pre_path = "../Data/weibo/tweets/"
-        file_list = [pre_path + "test_nonrumor.txt", pre_path + "test_rumor.txt", \
-                         pre_path + "train_nonrumor.txt", pre_path + "train_rumor.txt"]
-        if flag == "train":
-            id = pickle.load(open("../Data/weibo/train_id.pickle", 'rb'))
-            id_v = pickle.load(open("../Data/weibo/validate_id.pickle", 'rb'))
-            id.update(id_v)
-        #elif flag == "validate":
-        #    id = pickle.load(open("../Data/weibo/validate_id.pickle", 'rb'))
-        elif flag == "test":
-            id = pickle.load(open("../Data/weibo/test_id.pickle", 'rb'))
-
+        path = "../CFND/"
+        
+        file_path = path + ("train_data.csv" if flag == "train" else "test_data.csv")
+        df = pd.read_csv(file_path)
+        print(len(df))
 
         post_content = []
-        labels = []
-        image_ids = []
-        twitter_ids = []
         data = []
-        column = ['post_id', 'image_id', 'original_post', 'post_text', 'label', 'event_label']
-        key = -1
-        map_id = {}
-        top_data = []
-        for k, f in enumerate(file_list):
+        column = ['post_id', 'image_id', 'original_post', 'post_text', 'label']
 
-            f = open(f, 'rb')
-            if (k + 1) % 2 == 1:
-                label = 0  ### real is 0
-            else:
-                label = 1  ####fake is 1
+        for i, row in df.iterrows():
+            post_id = str(i)
+            text = row['title']
+            image_path = row['image']
+            label = row['label']
 
-            twitter_id = 0
-            line_data = []
-            top_line_data = []
+            # 文本预处理
+            clean_l = clean_str_sst(str(text))
+            seg_list = jieba.cut_for_search(clean_l)
+            new_seg_list = [word for word in seg_list if word not in stop_words]
+            clean_text = " ".join(new_seg_list)
 
-            for i, l in enumerate(f.readlines()):
-                # key += 1
-
-                # if int(key /3) in index:
-                # print(key/3)
-                # continue
+            image_id = os.path.basename(image_path).split(".")[0]
 
 
-                if (i + 1) % 3 == 1:
-                    line_data = []
-                    twitter_id = l.decode('utf-8').split('|')[0]
-                    line_data.append(twitter_id)
+            post_content.append(text)
+            data.append([post_id, image_id, text, clean_text, label])
 
-
-
-                if (i + 1) % 3 == 2:
-
-                    line_data.append(l.lower())
-
-                if (i + 1) % 3 == 0:
-                    l = clean_str_sst(str(l, "utf-8"))
-
-                    seg_list = jieba.cut_for_search(l)
-                    new_seg_list = []
-                    for word in seg_list:
-                        if word not in stop_words:
-                            new_seg_list.append(word)
-
-                    clean_l = " ".join(new_seg_list)
-                    if len(clean_l) > 10 and line_data[0] in id:
-                        post_content.append(l)
-                        line_data.append(l)
-                        line_data.append(clean_l)
-                        line_data.append(label)
-                        event = int(id[line_data[0]])
-                        if event not in map_id:
-                            map_id[event] = len(map_id)
-                            event = map_id[event]
-                        else:
-                            event = map_id[event]
-
-                        line_data.append(event)
-
-                        data.append(line_data)
-
-
-            f.close()
-            # print(data)
-            #     return post_content
-        
-        data_df = pd.DataFrame(np.array(data), columns=column)
-        write_txt(top_data)
-
+        data_df = pd.DataFrame(data, columns=column)
         return post_content, data_df
-    
+
     post_content, post = read_post(flag)
     print("Original post length is " + str(len(post_content)))
     print("Original data frame is " + str(post.shape))
@@ -195,7 +162,6 @@ def write_data(flag, image, text_only):
         ordered_image = []
         ordered_text = []
         ordered_post = []
-        ordered_event= []
         label = []
         post_id = []
         image_id_list = []
@@ -215,14 +181,12 @@ def write_data(flag, image, text_only):
                     ordered_image.append(image[image_name])
                 ordered_text.append(post.iloc[i]['original_post'])
                 ordered_post.append(post.iloc[i]['post_text'])
-                ordered_event.append(post.iloc[i]['event_label'])
                 post_id.append(id)
 
 
                 label.append(post.iloc[i]['label'])
 
         label = np.array(label, dtype=int)
-        ordered_event = np.array(ordered_event, dtype=int)
 
         print("Label number is " + str(len(label)))
         print("Rummor number is " + str(sum(label)))
@@ -241,7 +205,7 @@ def write_data(flag, image, text_only):
                 "original_post": np.array(ordered_text),
                 "image": ordered_image, "social_feature": [],
                 "label": np.array(label), \
-                "event_label": ordered_event, "post_id":np.array(post_id),
+                "post_id":np.array(post_id),
                 "image_id":image_id_list}
         #print(data['image'][0])
 
@@ -390,7 +354,7 @@ def get_data(text_only):
 
     #
     #
-    word_embedding_path = "../Data/weibo/w2v.pickle"
+    word_embedding_path = "../CFND/w2v.pickle"
 
     w2v = pickle.load(open(word_embedding_path, 'rb'), encoding='latin1')
     # print(temp)
@@ -433,7 +397,7 @@ def get_data(text_only):
     # # rand_vecs = {}
     # # add_unknown_words(rand_vecs, vocab)
     W2 = rand_vecs = {}
-    w_file = open("../Data/weibo/word_embedding.pickle", "wb")
+    w_file = open("../CFND/word_embedding.pickle", "wb")
     pickle.dump([W, W2, word_idx_map, vocab, max_l], w_file)
     w_file.close()
     return train_data, test_data
